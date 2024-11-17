@@ -12,10 +12,13 @@ import (
 )
 
 func main() {
-	// Load environment variables
-	err := godotenv.Load()
-	if err != nil {
-		log.Println("Error loading .env file")
+	// ตรวจสอบว่าโปรแกรมกำลังรันบน Railway หรือไม่
+	if os.Getenv("RAILWAY_ENV") == "" {
+		// โหลด .env ในเครื่องเท่านั้น
+		err := godotenv.Load()
+		if err != nil {
+			log.Println("Error loading .env file")
+		}
 	}
 
 	// Initialize Router
