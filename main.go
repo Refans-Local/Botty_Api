@@ -26,6 +26,7 @@ func main() {
 
 	// Auth Route
 	r.HandleFunc("/api/auth/login", handlers.Login).Methods("POST")
+	r.HandleFunc("/api/auth/change-password", handlers.ChangePassword).Methods("POST")
 
 	// Start Server
 	port := os.Getenv("PORT")

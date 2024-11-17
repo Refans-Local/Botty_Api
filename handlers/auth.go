@@ -12,6 +12,12 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+type ChangePasswordRequest struct {
+	Email       string `json:"email"`
+	OldPassword string `json:"old_password"`
+	NewPassword string `json:"new_password"`
+}
+
 type Credentials struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
@@ -104,4 +110,63 @@ func generateJWT(user User) (string, error) {
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(secret))
+}
+
+func ChangePassword(w http.ResponseWriter, r *http.Request) {
+	var req ChangePasswordRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		return
+	}
+
+	// Connect to database
+	db, err := connectDB()
+	if err != nil {
+		http.Error(w, "Database connection error", http.StatusInternalServerError)
+		return
+	}
+	defer db.Close()
+
+	// Fetch user by email
+	var storedPassword string
+	query := "SELECT password FROM users WHERE email = $1"
+	err = db.QueryRow(query, req.Email).Scan(&storedPassword)
+	if err == sql.ErrNoRows {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	} else if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	// Compare old password
+	err = bcrypt.CompareHashAndPassword([]byte(storedPassword), []byte(req.OldPassword))
+	if err != nil {
+		http.Error(w, "Invalid old password", http.StatusUnauthorized)
+		return
+	}
+
+	// Hash new password
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		http.Error(w, "Error hashing password", http.StatusInternalServerError)
+		return
+	}
+
+	// Update password in database
+	updateQuery := "UPDATE users SET password = $1 WHERE email = $2"
+	_, err = db.Exec(updateQuery, hashedPassword, req.Email)
+	if err != nil {
+		http.Error(w, "Error updating password", http.StatusInternalServerError)
+		return
+	}
+
+	// Success response
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"status":  "success",
+		"message": "Password updated successfully",
+	})
 }
